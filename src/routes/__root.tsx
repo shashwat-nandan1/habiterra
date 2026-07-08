@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
-  Link,
   createRootRouteWithContext,
   useRouter,
   HeadContent,
@@ -11,61 +10,26 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { supabase } from "@/integrations/supabase/client";
+import { Toaster } from "@/components/ui/sonner";
 
-function NotFoundComponent() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
-        </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+function ErrorFallback({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportLovableError(error, { boundary: "root" });
   }, [error]);
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
-        </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+    <div className="min-h-dvh flex items-center justify-center px-6">
+      <div className="max-w-sm text-center space-y-4">
+        <div className="text-6xl">🥀</div>
+        <h1 className="text-xl font-bold">Something wilted</h1>
+        <p className="text-sm text-muted-foreground">Try again or head back home.</p>
+        <div className="flex gap-2 justify-center">
           <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Try again
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
-          </a>
+            onClick={() => { router.invalidate(); reset(); }}
+            className="rounded-full bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold"
+          >Try again</button>
+          <a href="/" className="rounded-full border border-border px-4 py-2 text-sm font-semibold">Home</a>
         </div>
       </div>
     </div>
@@ -76,36 +40,41 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { title: "Habiterra — Grow better, together" },
+      { name: "description", content: "A cozy, gamified habit tracker where every habit you build grows a beautiful garden." },
+      { name: "theme-color", content: "#4F8F3A" },
+      { property: "og:title", content: "Habiterra — Grow better, together" },
+      { property: "og:description", content: "Build habits, grow gardens, share your world with friends." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
+      { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" },
     ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
-  notFoundComponent: NotFoundComponent,
-  errorComponent: ErrorComponent,
+  notFoundComponent: () => (
+    <div className="min-h-dvh flex items-center justify-center px-6 text-center">
+      <div>
+        <div className="text-6xl mb-3">🌿</div>
+        <h1 className="text-2xl font-bold">Lost in the garden</h1>
+        <a href="/" className="mt-4 inline-block rounded-full bg-primary text-primary-foreground px-5 py-2 font-semibold">Go home</a>
+      </div>
+    </div>
+  ),
+  errorComponent: ErrorFallback,
 });
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
+      <head><HeadContent /></head>
       <body>
         {children}
         <Scripts />
@@ -116,11 +85,19 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
+  const router = useRouter();
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+      router.invalidate();
+      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [router, queryClient]);
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <Toaster position="top-center" richColors />
     </QueryClientProvider>
   );
 }
