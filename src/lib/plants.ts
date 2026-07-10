@@ -32,12 +32,15 @@ export const FREQUENCIES: FrequencyOption[] = [
   { value: "weekly", label: "Weekly", target_per_week: 1 },
 ];
 
-export function todayISO(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+function formatLocalDateISO(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+export function todayISO(): string {
+  return formatLocalDateISO(new Date());
 }
 
 export function weekStartISO(): string {
@@ -46,5 +49,5 @@ export function weekStartISO(): string {
   const diff = (day + 6) % 7; // Monday as start
   d.setDate(d.getDate() - diff);
   d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDateISO(d);
 }

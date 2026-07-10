@@ -139,15 +139,11 @@ function Step2({ onFinish }: { onFinish: () => void }) {
     setQ(val);
     if (val.trim().length < 2) { setResults([]); setStatus("idle"); return; }
     setStatus("loading");
-    const { data: me } = await supabase.auth.getUser();
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, avatar_url")
-      .or(`full_name.ilike.%${val}%,email.ilike.%${val}%`)
-      .neq("id", me.user?.id ?? "")
-      .limit(10);
+    const { data, error } = await supabase.rpc("search_profiles", {
+      search_query: val.trim(),
+    });
     if (error) return setStatus("error");
-    setResults(data ?? []);
+    setResults((data ?? []).slice(0, 10));
     setStatus((data?.length ?? 0) === 0 ? "empty" : "idle");
   };
 
@@ -159,7 +155,10 @@ function Step2({ onFinish }: { onFinish: () => void }) {
       requester_id: me.user.id, receiver_id: id,
     });
     if (error) {
-      toast.error("Couldn't send request", { description: error.message });
+      const duplicate = error.code === "23505";
+      toast.error(duplicate ? "Friend request already exists" : "Couldn't send request", {
+        description: duplicate ? "You already have an active request or friendship with this gardener." : error.message,
+      });
       setSent((s) => { const c = { ...s }; delete c[id]; return c; });
       return;
     }
