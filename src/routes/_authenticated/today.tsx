@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { GardenView } from "@/components/GardenView";
@@ -23,8 +23,10 @@ function TodayPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [allCompletions, setAllCompletions] = useState<Completion[]>([]);
-  const [onboardingDone, setOnboardingDone] = useState(true);
+  const [todayCompletions, setTodayCompletions] = useState<Completion[]>([]);
+  const [weekCompletions, setWeekCompletions] = useState<Completion[]>([]);
+  const [gardenCompletions, setGardenCompletions] = useState<Completion[]>([]);
+  const [totalCompletions, setTotalCompletions] = useState(0);
 
   const today = todayISO();
   const weekStart = weekStartISO();
@@ -33,31 +35,35 @@ function TodayPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
     const uid = userData.user.id;
-    const [{ data: prof }, { data: hs }, { data: cs }] = await Promise.all([
+    const [
+      { data: prof },
+      { data: hs },
+      { data: todays },
+      { data: week },
+      { count },
+      { data: garden },
+    ] = await Promise.all([
       supabase.from("profiles").select("onboarding_completed").eq("id", uid).maybeSingle(),
       supabase.from("habits").select("*").eq("user_id", uid).eq("is_active", true).order("created_at"),
-      supabase.from("habit_completions").select("*").eq("user_id", uid),
+      supabase.from("habit_completions").select("*").eq("user_id", uid).eq("completed_on", today),
+      supabase.from("habit_completions").select("*").eq("user_id", uid).gte("completed_on", weekStart),
+      supabase.from("habit_completions").select("id", { count: "exact", head: true }).eq("user_id", uid),
+      supabase.from("habit_completions").select("*").eq("user_id", uid).order("completed_at", { ascending: false }).order("completed_on", { ascending: false }).limit(40),
     ]);
     if (prof && !prof.onboarding_completed) {
       navigate({ to: "/onboarding", replace: true });
       return;
     }
-    setOnboardingDone(prof?.onboarding_completed ?? true);
     setHabits((hs as Habit[]) ?? []);
-    setAllCompletions((cs as Completion[]) ?? []);
+    setTodayCompletions((todays as Completion[]) ?? []);
+    setWeekCompletions((week as Completion[]) ?? []);
+    setGardenCompletions((garden as Completion[]) ?? []);
+    setTotalCompletions(count ?? 0);
     setLoading(false);
   };
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
-  const todayCompletions = useMemo(
-    () => allCompletions.filter((c) => c.completed_on === today),
-    [allCompletions, today]
-  );
-  const weekCompletions = useMemo(
-    () => allCompletions.filter((c) => c.completed_on >= weekStart),
-    [allCompletions, weekStart]
-  );
   const dailyHabits = habits.filter((h) => h.frequency_type === "daily");
   const weeklyHabits = habits.filter((h) => h.frequency_type !== "daily");
   const dueToday = dailyHabits.length + weeklyHabits.filter((h) => {
@@ -68,7 +74,18 @@ function TodayPage() {
   const doneToday = todayCompletions.length;
 
   const complete = async (habit: Habit) => {
-    if (todayCompletions.some((c) => c.habit_id === habit.id)) return;
+    if (todayCompletions.some((c) => c.habit_id === habit.id)) {
+      toast.info("Already tended today");
+      return;
+    }
+    if (habit.frequency_type !== "daily") {
+      const doneThisWeek = weekCompletions.filter((c) => c.habit_id === habit.id).length;
+      const target = habit.target_per_week ?? 1;
+      if (doneThisWeek >= target) {
+        toast.info("Weekly target already met");
+        return;
+      }
+    }
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
     const optimistic: Completion = {
@@ -77,16 +94,27 @@ function TodayPage() {
       completed_on: today,
       plant_type: habit.plant_type,
     };
-    setAllCompletions((c) => [...c, optimistic]);
+    setTodayCompletions((c) => [...c, optimistic]);
+    setWeekCompletions((c) => [...c, optimistic]);
+    setGardenCompletions((c) => [optimistic, ...c].slice(0, 40));
+    setTotalCompletions((count) => count + 1);
     const { data, error } = await supabase.from("habit_completions").insert({
       habit_id: habit.id, user_id: userData.user.id, completed_on: today, plant_type: habit.plant_type,
     }).select().single();
     if (error) {
-      setAllCompletions((c) => c.filter((x) => x.id !== optimistic.id));
-      toast.error("Couldn't mark as done", { description: error.message });
+      setTodayCompletions((c) => c.filter((x) => x.id !== optimistic.id));
+      setWeekCompletions((c) => c.filter((x) => x.id !== optimistic.id));
+      setGardenCompletions((c) => c.filter((x) => x.id !== optimistic.id));
+      setTotalCompletions((count) => Math.max(0, count - 1));
+      const duplicate = error.code === "23505";
+      toast.error(duplicate ? "Already marked today" : "Couldn't mark as done", {
+        description: duplicate ? "This habit has already been tended today." : error.message,
+      });
       return;
     }
-    setAllCompletions((c) => c.map((x) => (x.id === optimistic.id ? (data as Completion) : x)));
+    setTodayCompletions((c) => c.map((x) => (x.id === optimistic.id ? (data as Completion) : x)));
+    setWeekCompletions((c) => c.map((x) => (x.id === optimistic.id ? (data as Completion) : x)));
+    setGardenCompletions((c) => c.map((x) => (x.id === optimistic.id ? (data as Completion) : x)));
     toast.success(`${plantByType(habit.plant_type).emoji} ${habit.name} tended!`);
   };
 
@@ -102,12 +130,12 @@ function TodayPage() {
           <p className="text-sm text-muted-foreground">Your garden, your day</p>
         </div>
         <div className="rounded-full bg-card soft-shadow px-3 py-1.5 flex items-center gap-1 font-bold text-primary text-sm shrink-0">
-          <Leaf className="h-4 w-4" />{allCompletions.length}
+          <Leaf className="h-4 w-4" />{totalCompletions}
         </div>
       </header>
 
       <div className="mt-4">
-        <GardenView completions={allCompletions} />
+        <GardenView completions={gardenCompletions} />
       </div>
 
       {/* Progress */}

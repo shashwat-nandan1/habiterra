@@ -180,7 +180,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      search_profiles: {
+        Args: { search_query: string }
+        Returns: {
+          id: string
+          full_name: string | null
+          email: string
+          avatar_url: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
