@@ -48,7 +48,7 @@ function TodayPage() {
       supabase.from("habit_completions").select("*").eq("user_id", uid).eq("completed_on", today),
       supabase.from("habit_completions").select("*").eq("user_id", uid).gte("completed_on", weekStart),
       supabase.from("habit_completions").select("id", { count: "exact", head: true }).eq("user_id", uid),
-      supabase.from("habit_completions").select("*").eq("user_id", uid).order("completed_on", { ascending: false }).limit(40),
+      supabase.from("habit_completions").select("*").eq("user_id", uid).order("completed_at", { ascending: false }).order("completed_on", { ascending: false }).limit(40),
     ]);
     if (prof && !prof.onboarding_completed) {
       navigate({ to: "/onboarding", replace: true });
